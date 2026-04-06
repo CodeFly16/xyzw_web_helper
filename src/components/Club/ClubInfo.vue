@@ -1785,10 +1785,12 @@ const formatNumber = (num) => {
     margin-bottom: var(--spacing-sm);
   }
 
-  .members {
-    :deep(.n-data-table-wrapper) {
-      width: calc(100vw - 45px);
-      overflow-x: scroll;
+  @media (max-width: 768px) {
+    .members {
+      :deep(.n-data-table-wrapper) {
+        width: calc(100vw - 45px);
+        overflow-x: scroll;
+      }
     }
   }
 
