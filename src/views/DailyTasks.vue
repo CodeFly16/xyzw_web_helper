@@ -846,4 +846,19 @@ watch(
     width: 100%;
   }
 }
+
+@media (max-width: 480px) {
+  .page-title {
+    font-size: var(--font-size-xl);
+  }
+
+  .page-subtitle {
+    font-size: var(--font-size-sm);
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+}
 </style>

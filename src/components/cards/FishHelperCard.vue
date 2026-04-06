@@ -143,6 +143,7 @@ const handleHelper = async () => {
     display: flex;
     align-items: center;
     justify-content: space-around;
+    flex-wrap: wrap;
 
     .item {
       display: flex;

@@ -182,7 +182,7 @@
     v-model:show="helperDialogVisible"
     preset="card"
     title="选择护卫"
-    style="width: 600px"
+    style="width: min(600px, 95vw)"
   >
     <div class="helper-body">
       <div class="helper-row">
@@ -194,7 +194,7 @@
           :loading="helperLoading"
           filterable
           :max-tag-count="1"
-          style="width: 420px"
+          style="flex: 1; min-width: 0"
         />
       </div>
       <div class="tips">说明：次数满 4 的成员不可再被选择。</div>
@@ -1217,8 +1217,9 @@ const cancelHelper = () => {
 .helper-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .helper-row .label {

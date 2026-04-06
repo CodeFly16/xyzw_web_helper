@@ -444,4 +444,19 @@ onMounted(() => {
     justify-content: center;
   }
 }
+
+@media (max-width: 480px) {
+  .changelog-page {
+    padding: 12px 8px;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+}
 </style>

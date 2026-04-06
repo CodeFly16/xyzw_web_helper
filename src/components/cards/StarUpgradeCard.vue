@@ -356,6 +356,7 @@ const formatTime = (ts) => new Date(ts).toLocaleTimeString("zh-CN");
   justify-content: flex-start;
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
 }
 .setting-item {
   display: flex;
@@ -368,6 +369,7 @@ const formatTime = (ts) => new Date(ts).toLocaleTimeString("zh-CN");
 .status-row {
   display: flex;
   gap: var(--spacing-lg);
+  flex-wrap: wrap;
 }
 .progress-row {
   display: flex;

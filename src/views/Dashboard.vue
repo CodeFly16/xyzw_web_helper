@@ -493,11 +493,30 @@ onMounted(async () => {
   }
 
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .actions-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-main {
+    padding: var(--spacing-sm);
+  }
+
+  .welcome-section {
+    padding: var(--spacing-md);
+  }
+
+  .welcome-text h1 {
+    font-size: var(--font-size-xl);
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
   }
 }
 </style>

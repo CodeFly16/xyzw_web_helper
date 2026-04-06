@@ -2487,6 +2487,7 @@ onMounted(() => {
   display: flex;
   gap: var(--spacing-sm);
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .current-team-section {
@@ -2689,17 +2690,19 @@ onMounted(() => {
 
   .stat-row {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
+    flex-wrap: wrap;
   }
 
   span {
-    padding: 2px 6px;
+    padding: 2px 5px;
     border-radius: 4px;
     font-weight: 500;
     white-space: nowrap;
-    min-width: 90px;
+    min-width: 0;
     text-align: center;
+    flex: 1 1 auto;
   }
 
   .stat-power {
@@ -2821,6 +2824,7 @@ onMounted(() => {
   gap: var(--spacing-md);
   justify-content: center;
   margin-bottom: var(--spacing-sm);
+  min-width: max-content;
 }
 
 .lineup-hero-card {
@@ -3003,12 +3007,17 @@ onMounted(() => {
 .team-selector {
   display: flex;
   gap: var(--spacing-xs);
+  flex-wrap: wrap;
 }
 
 .refine-modal-content {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--spacing-md);
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 .equip-refine-section {
@@ -3336,7 +3345,9 @@ onMounted(() => {
 .lineup-title-bar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
   padding: var(--spacing-sm);
   cursor: pointer;
   transition: background 0.2s;
@@ -3380,12 +3391,14 @@ onMounted(() => {
 .lineup-quick-actions {
   display: flex;
   gap: var(--spacing-xs);
+  flex-wrap: wrap;
 }
 
 .lineup-detail {
   padding: var(--spacing-sm);
   padding-top: 0;
   border-top: 1px solid var(--border-color);
+  overflow-x: auto;
 }
 
 .lineup-heroes-detail {
@@ -3506,5 +3519,50 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   text-align: center;
   padding: var(--spacing-lg);
+}
+
+@media (max-width: 480px) {
+  .toolbar {
+    gap: 4px;
+  }
+
+  .hero-item {
+    padding: var(--spacing-xs);
+    gap: 4px;
+  }
+
+  .hero-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .hero-name-small-inline {
+    max-width: 48px;
+    font-size: 10px;
+  }
+
+  .hero-level-small-inline {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+
+  .hero-fish {
+    font-size: 10px;
+    padding: 2px 4px;
+    gap: 3px;
+  }
+
+  .hero-stats .stat-power {
+    font-size: 10px;
+  }
+
+  .hero-stats span {
+    padding: 1px 4px;
+    font-size: 10px;
+  }
+
+  .hero-actions {
+    min-width: 48px;
+  }
 }
 </style>

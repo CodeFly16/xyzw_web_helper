@@ -100,7 +100,7 @@
         v-model:show="showAddModal"
         preset="card"
         title="添加游戏角色"
-        style="width: 500px"
+        style="width: min(500px, 95vw)"
       >
         <n-form
           ref="roleFormRef"
@@ -534,6 +534,20 @@ onMounted(async () => {
 
   .role-stats {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 var(--spacing-sm);
+  }
+
+  .game-roles-page {
+    padding: var(--spacing-md) 0;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
   }
 }
 </style>

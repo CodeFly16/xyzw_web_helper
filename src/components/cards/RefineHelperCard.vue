@@ -1426,4 +1426,18 @@ h4 {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
+
+@media (max-width: 768px) {
+  .hero-item {
+    flex: 0 0 calc(50% - 8px);
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-item {
+    flex: 0 0 calc(100% - 8px);
+    min-width: 0;
+  }
+}
 </style>

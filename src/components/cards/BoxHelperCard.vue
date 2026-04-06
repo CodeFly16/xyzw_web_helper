@@ -178,6 +178,7 @@ const handleBoxHelper = async () => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
 
     .item {
       display: flex;

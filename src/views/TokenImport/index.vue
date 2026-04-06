@@ -423,7 +423,7 @@
                         @keyup.enter="saveRemark(token)"
                         @keyup.esc="cancelEditRemark()"
                         autofocus
-                        style="width: 150px"
+                        style="width: min(150px, 40vw)"
                       />
                     </div>
                     <div
@@ -563,7 +563,7 @@
       v-model:show="showEditModal"
       preset="card"
       title="编辑Token"
-      style="width: 500px"
+      style="width: min(500px, 95vw)"
     >
       <n-form
         ref="editFormRef"
@@ -2265,6 +2265,26 @@ onUnmounted(() => {
   .storage-info {
     flex-direction: column;
     gap: var(--spacing-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 var(--spacing-sm);
+  }
+
+  .section-header .header-actions {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+  }
+
+  /* token列表项在小屏幕上换行显示 */
+  .tokens-list :deep(.n-card__content) {
+    overflow: hidden;
+  }
+
+  .tokens-list :deep(.n-space) {
+    flex-wrap: wrap !important;
   }
 }
 

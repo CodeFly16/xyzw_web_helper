@@ -412,4 +412,18 @@ h2 {
     width: 100%;
   }
 }
+
+@media (max-width: 480px) {
+  .container {
+    padding: 0 var(--spacing-sm);
+  }
+
+  .profile-page {
+    padding: var(--spacing-md) 0;
+  }
+
+  .page-header h1 {
+    font-size: var(--font-size-2xl);
+  }
+}
 </style>

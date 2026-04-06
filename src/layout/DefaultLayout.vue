@@ -346,6 +346,10 @@ const handleUserAction = async (key) => {
     flex: 0 0 auto;
   }
 
+  .username {
+    display: none;
+  }
+
   .nav-container {
     height: 56px;
   }

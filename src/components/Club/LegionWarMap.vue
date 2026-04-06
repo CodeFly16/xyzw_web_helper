@@ -1013,5 +1013,18 @@ onUnmounted(() => {
   .map-container-wrapper {
     height: 400px !important;
   }
+
+  .side-info-panel {
+    width: 100% !important;
+    height: auto !important;
+    border-left: none !important;
+    border-top: 1px solid #eee;
+  }
+}
+
+@media (max-width: 480px) {
+  .map-container-wrapper {
+    height: 280px !important;
+  }
 }
 </style>

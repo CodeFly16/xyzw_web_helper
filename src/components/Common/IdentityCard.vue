@@ -695,7 +695,7 @@ watch(() => roleInfo.value, initializeAvatar, { deep: true });
 .identity-card {
   position: fixed;
   top: 0;
-  width: 360px;
+  width: min(360px, 95vw);
   background: var(--bg-primary);
   border-radius: var(--border-radius-xl);
   padding: var(--spacing-lg);

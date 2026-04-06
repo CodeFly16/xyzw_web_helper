@@ -77,7 +77,7 @@
       v-model:show="showSettings"
       preset="card"
       title="任务设置"
-      style="width: 480px"
+      style="width: min(480px, 95vw)"
     >
       <template #header>
         <div class="modal-header">
@@ -555,6 +555,17 @@ watch(
 
   .info-container {
     flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .daily-task-card {
+    padding: var(--spacing-sm);
+  }
+
+  .card-header {
+    flex-wrap: wrap;
     gap: var(--spacing-sm);
   }
 }

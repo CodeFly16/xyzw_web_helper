@@ -528,3 +528,36 @@ img {
     overflow-y: auto !important;
   }
 }
+
+// Naive UI Modal 全局移动端适配
+@media (max-width: 768px) {
+  .n-modal {
+    max-width: 95vw !important;
+  }
+
+  .n-card.n-modal {
+    max-width: 95vw !important;
+  }
+}
+
+// 全局 480px 断点 - 超小屏幕
+@media (max-width: 480px) {
+  .container,
+  .container-sm,
+  .container-lg {
+    padding: 0 var(--spacing-xs);
+  }
+
+  .text-3xl {
+    font-size: var(--font-size-xl);
+  }
+
+  .text-2xl {
+    font-size: var(--font-size-lg);
+  }
+
+  // 确保不出现水平溢出
+  body {
+    overflow-x: hidden;
+  }
+}

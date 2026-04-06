@@ -983,26 +983,26 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
           "
         >
-          <div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
             <n-button type="primary" @click="openNewTemplateModal"
               >新增模板</n-button
             >
             <n-button
               @click="openApplyTemplateModal"
               type="success"
-              style="margin-left: 8px"
               >应用模板</n-button
             >
             <n-button
               @click="openAccountTemplateModal"
               type="info"
-              style="margin-left: 8px"
               >查看账号模板引用</n-button
             >
           </div>
-          <n-input placeholder="搜索模板" size="small" style="width: 200px" />
+          <n-input placeholder="搜索模板" size="small" style="width: min(200px, 100%)" />
         </div>
 
         <!-- Template List -->
@@ -6125,6 +6125,16 @@ const stopBatch = () => {
   .log-container {
     height: 300px;
     min-height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .batch-daily-tasks {
+    padding: 8px;
+  }
+
+  .page-header h2 {
+    font-size: 16px;
   }
 }
 

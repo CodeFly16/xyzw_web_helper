@@ -612,4 +612,12 @@ onMounted(() => {
   background: rgba(32, 192, 80, 0.1);
   color: var(--color-success);
 }
+
+@media (max-width: 480px) {
+  .member-info {
+    min-width: 0;
+    max-width: 100%;
+    flex: 1;
+  }
+}
 </style>
