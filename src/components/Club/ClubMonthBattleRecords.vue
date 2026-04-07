@@ -18,6 +18,14 @@
             <n-radio-button value="style1">样式一</n-radio-button>
             <n-radio-button value="style2">样式二</n-radio-button>
           </n-radio-group>
+          <a-month-picker
+            v-model:value="selectedMonth"
+            :defaultValue="selectedMonth"
+            @change="fetchBattleRecordsByMonth"
+            valueFormat="YYYY/MM"
+            format="YYYY年MM月"
+            :disabled-date="disabledMonth"
+          />
           <n-button size="small" :disabled="loading" @click="handleRefresh">
             <template #icon>
               <n-icon>
@@ -504,10 +512,26 @@ const monthlyBattleRecords = ref({})
 const expandedMembers = ref(new Set())
 const battleDates = ref([])
 
-// 计算当月的5个战斗日期
+// 当前选中月份，默认为本月 (YYYY/MM 格式)
+const now = new Date()
+const selectedMonth = ref(`${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`)
+
+// 禁用未来月份
+const disabledMonth = (current) => {
+  return current > new Date()
+}
+
+// 切换月份时重新拉取数据
+const fetchBattleRecordsByMonth = (val) => {
+  selectedMonth.value = val || `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}`
+  fetchMonthlyBattleRecords()
+}
+
+// 计算指定月份的5个战斗日期
 const getCurrentMonthBattleDates = () => {
-  const dateObj = new Date();
-  
+  const [yearStr, monthStr] = selectedMonth.value.split('/')
+  const dateObj = new Date(parseInt(yearStr), parseInt(monthStr) - 1, 1)
+
   const dates = [];
   const year = dateObj.getFullYear();
   const month = dateObj.getMonth();
@@ -545,11 +569,13 @@ const getCurrentMonthBattleDates = () => {
     return `${y}/${m}/${d}`;
   });
   
-  // 过滤掉当前日期之后的战斗日期
+  // 过滤掉今天之后的战斗日期（选历史月份时全部保留）
   const currentDate = new Date();
   const currentDateStr = `${currentDate.getFullYear()}/${String(currentDate.getMonth() + 1).padStart(2, '0')}/${String(currentDate.getDate()).padStart(2, '0')}`;
-  
-  return formattedDates.filter(date => date <= currentDateStr);
+  const [selYear, selMonth2] = selectedMonth.value.split('/').map(Number);
+  const isCurrentMonth = selYear === currentDate.getFullYear() && selMonth2 === currentDate.getMonth() + 1;
+
+  return isCurrentMonth ? formattedDates.filter(date => date <= currentDateStr) : formattedDates;
 };
 
 // 格式化短日期显示 (MM/DD)
@@ -748,10 +774,8 @@ const getReviveColor = (val) => {
 
 // 当前月份显示
 const currentMonthDisplay = computed(() => {
-  const dateObj = new Date();
-  const year = dateObj.getFullYear();
-  const month = dateObj.getMonth() + 1;
-  return `${year}年${month}月`;
+  const [year, month] = selectedMonth.value.split('/')
+  return `${year}年${parseInt(month)}月`
 });
 
 // 处理图片加载错误
