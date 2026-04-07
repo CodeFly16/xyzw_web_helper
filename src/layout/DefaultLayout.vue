@@ -177,6 +177,32 @@
     <div class="main">
       <router-view />
     </div>
+
+    <!-- 断线蒙层 -->
+    <Transition name="overlay-fade">
+      <div v-if="isDisconnected" class="disconnect-overlay">
+        <div class="disconnect-card">
+          <div class="disconnect-icon">
+            <n-icon size="56" color="#f5a623">
+              <WifiOutline />
+            </n-icon>
+          </div>
+          <h2 class="disconnect-title">连接已断开</h2>
+          <p class="disconnect-desc">
+            与服务器的 WebSocket 连接已断开，请点击下方按钮重新连接。
+          </p>
+          <n-button
+            type="primary"
+            size="large"
+            :loading="isReconnecting"
+            @click="handleReconnect"
+            class="reconnect-btn"
+          >
+            {{ isReconnecting ? '连接中...' : '重新连接' }}
+          </n-button>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -197,11 +223,12 @@ import {
   LockClosedSharp,LockOpen,
   Menu,
   Layers,
+  WifiOutline,
 } from "@vicons/ionicons5";
 
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { ref } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { isNowInLegionWarTime } from '@/utils/clubBattleUtils'
 
 const tokenStore = useTokenStore();
@@ -209,6 +236,82 @@ const router = useRouter();
 const message = useMessage();
 
 const isMobileMenuOpen = ref(false);
+
+// ---- 断线检测 ----
+const isReconnecting = ref(false);
+
+// 当前选中 token 的 ws 状态
+const currentWsStatus = computed(() => {
+  if (!selectedTokenId.value) return null;
+  return tokenStore.wsConnections[selectedTokenId.value]?.status ?? null;
+});
+
+// 仅在有 token 且状态为 disconnected/error 时显示蒙层
+const isDisconnected = computed(() => {
+  if (!selectedTokenId.value) return false;
+  const s = currentWsStatus.value;
+  return s === 'disconnected' || s === 'error';
+});
+
+// 心跳定时器：每 15s 检测一次，若断开则强制刷新状态（ws 内部会自动重连，这里只做 UI 兜底）
+let heartbeatTimer = null;
+const startHeartbeat = () => {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(() => {
+    const tokenId = selectedTokenId.value;
+    if (!tokenId) return;
+    const status = tokenStore.getWebSocketStatus(tokenId);
+    // 若已断线，触发重连
+    if (status === 'disconnected' || status === 'error') {
+      // 状态已是响应式，computed 自动更新，蒙层会显示
+    }
+  }, 15000);
+};
+const stopHeartbeat = () => {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+};
+
+// 重新连接
+const handleReconnect = () => {
+  const tokenId = selectedTokenId.value;
+  if (!tokenId || isReconnecting.value) return;
+  isReconnecting.value = true;
+
+  // selectToken(id, forceReconnect=true) 会取出 token 数据并创建连接
+  tokenStore.selectToken(tokenId, true);
+
+  // 监听状态变化，连接成功/失败后还原 loading
+  const stop = watch(currentWsStatus, (status) => {
+    if (status === 'connected') {
+      message.success('重新连接成功');
+      isReconnecting.value = false;
+      stop();
+    } else if (status === 'error') {
+      message.error('连接失败，请稍后重试');
+      isReconnecting.value = false;
+      stop();
+    }
+  });
+
+  // 15s 超时保护，防止一直 loading
+  setTimeout(() => {
+    if (isReconnecting.value) {
+      isReconnecting.value = false;
+      stop();
+    }
+  }, 15000);
+};
+
+// 切换 token 时重置状态
+watch(selectedTokenId, () => {
+  isReconnecting.value = false;
+});
+
+onMounted(() => startHeartbeat());
+onUnmounted(() => stopHeartbeat());
 
 const userMenuOptions = [
   {
@@ -383,6 +486,70 @@ const handleUserAction = async (key) => {
 .drawer-item.router-link-active {
   background: var(--primary-color-light);
   color: var(--primary-color);
+}
+
+// ---- 断线蒙层 ----
+.disconnect-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.disconnect-card {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  padding: 48px 40px;
+  text-align: center;
+  max-width: 380px;
+  width: 90%;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.disconnect-icon {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.92); }
+}
+
+.disconnect-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.disconnect-desc {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.reconnect-btn {
+  margin-top: 8px;
+  min-width: 140px;
+}
+
+// ---- 蒙层动画 ----
+.overlay-fade-enter-active,
+.overlay-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.overlay-fade-enter-from,
+.overlay-fade-leave-to {
+  opacity: 0;
 }
 
 /* 禁用样式：灰化、鼠标禁止、无hover效果 */

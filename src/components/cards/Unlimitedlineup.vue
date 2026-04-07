@@ -2054,11 +2054,33 @@ const applyLineup = async (lineup) => {
     currentHeroes = getTeamHeroes(data2.teamInfo);
 
     const placeHeroes = async (heroesList, latestTeam) => {
+      // Phase 1: 批量下阵所有位置错误的英雄，避免后续上阵时槽位被占
+      const removedHeroIds = new Set();
       for (const targetHero of heroesList) {
         const currentHero = latestTeam.find(
           (h) => h.heroId === targetHero.heroId,
         );
-        if (!currentHero) {
+        if (currentHero && currentHero.position !== targetHero.position) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "hero_gobackbattle",
+              {
+                slot: currentHero.position,
+              },
+            );
+            removedHeroIds.add(targetHero.heroId);
+          } catch (err) {}
+          await delay(COMMAND_DELAY);
+        }
+      }
+
+      // Phase 2: 上阵所有不在目标位置的英雄（含 Phase 1 下阵的 + 原本不在队伍的）
+      for (const targetHero of heroesList) {
+        const currentHero = latestTeam.find(
+          (h) => h.heroId === targetHero.heroId,
+        );
+        if (!currentHero || removedHeroIds.has(targetHero.heroId)) {
           try {
             await tokenStore.sendMessageWithPromise(
               tokenId,
@@ -2070,58 +2092,11 @@ const applyLineup = async (lineup) => {
             );
           } catch (err) {}
           await delay(COMMAND_DELAY);
-        } else if (currentHero.position !== targetHero.position) {
-          try {
-            await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "hero_gobackbattle",
-              {
-                slot: currentHero.position,
-              },
-            );
-            await delay(COMMAND_DELAY);
-            try {
-              await tokenStore.sendMessageWithPromise(
-                tokenId,
-                "hero_gointobattle",
-                {
-                  heroId: targetHero.heroId,
-                  slot: targetHero.position,
-                },
-              );
-            } catch (err) {}
-            await delay(COMMAND_DELAY);
-          } catch (err) {}
-          await delay(COMMAND_DELAY);
         }
       }
     };
 
     await placeHeroes(targetHeroes, currentHeroes);
-
-    // 校验上阵结果，不一致则重试（最多3次）
-    const MAX_PLACE_RETRIES = 3;
-    for (let attempt = 1; attempt <= MAX_PLACE_RETRIES; attempt++) {
-      const verifyData = await fetchLatestData();
-      await delay(COMMAND_DELAY);
-      const verifyHeroes = getTeamHeroes(verifyData.teamInfo);
-
-      const mismatches = targetHeroes.filter((targetHero) => {
-        return !verifyHeroes.find(
-          (h) =>
-            h.heroId === targetHero.heroId &&
-            h.position === targetHero.position,
-        );
-      });
-
-      if (mismatches.length === 0) break;
-
-      // 更新步骤标签提示重试
-      const step = applyProgress.value.steps[stepMap["上阵目标武将"]];
-      if (step) step.label = `上阵目标武将（第${attempt}次补正）`;
-
-      await placeHeroes(mismatches, verifyHeroes);
-    }
 
     // 恢复步骤标签
     const step = applyProgress.value.steps[stepMap["上阵目标武将"]];
@@ -2161,12 +2136,6 @@ const applyLineup = async (lineup) => {
       if (levelApplied > 0) {
         message.success(`已应用 ${levelApplied} 个武将等级配置`);
       }
-    }
-
-    if (errors.length > 0) {
-      message.warning(`阵容已应用，但有部分错误:\n${errors.join("\n")}`);
-    } else {
-      message.success(`阵容 "${lineup.name}" 已应用`);
     }
 
     const hasFishData = lineup.heroes.some((h) => h.pearlId || h.fishId);
@@ -2209,7 +2178,12 @@ const applyLineup = async (lineup) => {
           }
         }
 
-        if (!artifactId) continue;
+        if (!artifactId) {
+          const heroName =
+            getHeroName(targetHero.heroId) || `武将${targetHero.heroId}`;
+          errors.push(`${heroName} 的鱼灵无法找到对应装备`);
+          continue;
+        }
 
         const currentHolderId = artifactToHero[artifactId];
 
@@ -2224,6 +2198,26 @@ const applyLineup = async (lineup) => {
               "artifact_unload",
               {
                 heroId: currentHolderId,
+              },
+            );
+          } catch (err) {}
+          await delay(COMMAND_DELAY);
+        }
+
+        // 目标英雄当前若携带了不同鱼灵，需先卸下，否则服务端会拒绝装载
+        const targetHeroData = currentHeroes[String(targetHero.heroId)];
+        const existingArtifactId = targetHeroData?.artifactId;
+        if (
+          existingArtifactId &&
+          existingArtifactId !== -1 &&
+          existingArtifactId !== artifactId
+        ) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "artifact_unload",
+              {
+                heroId: targetHero.heroId,
               },
             );
           } catch (err) {}
@@ -2391,6 +2385,12 @@ const applyLineup = async (lineup) => {
         } catch (err) {}
         await delay(COMMAND_DELAY);
       }
+    }
+
+    if (errors.length > 0) {
+      message.warning(`阵容已应用，但有部分错误:\n${errors.join("\n")}`);
+    } else {
+      message.success(`阵容 "${lineup.name}" 已应用`);
     }
 
     setApplyStep(stepMap["刷新队伍信息"]);
