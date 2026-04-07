@@ -259,10 +259,7 @@
                   <n-button
                     type="primary"
                     size="tiny"
-                    @click.stop="
-                      applyLineup(lineup);
-                      savedLineupsModalVisible = false;
-                    "
+                    @click.stop="applyLineup(lineup)"
                     :loading="lineup.applying"
                     :disabled="lineup.teamId !== currentTeamId"
                   >
@@ -559,6 +556,63 @@
           </div>
         </template>
       </n-modal>
+
+      <!-- 应用阵容进度 Modal -->
+      <n-modal
+        v-model:show="applyProgressVisible"
+        preset="card"
+        title="正在应用阵容..."
+        style="width: 480px; max-width: 90vw"
+        :bordered="false"
+        :closable="false"
+        :mask-closable="false"
+      >
+        <div class="apply-progress-content">
+          <n-progress
+            type="line"
+            :percentage="applyProgress.percentage"
+            :status="applyProgress.status"
+            :indicator-placement="'inside'"
+          />
+          <div class="apply-progress-steps">
+            <div
+              v-for="(step, idx) in applyProgress.steps"
+              :key="idx"
+              class="apply-progress-step"
+              :class="{
+                'step-done': step.done,
+                'step-active': step.active,
+                'step-pending': !step.done && !step.active,
+              }"
+            >
+              <span class="step-icon">
+                {{ step.done ? "✓" : step.active ? "⏳" : "○" }}
+              </span>
+              <span class="step-label">{{ step.label }}</span>
+              <div
+                v-if="step.active && step.subSteps && step.subSteps.length > 0"
+                class="apply-sub-steps"
+              >
+                <div
+                  v-for="(sub, sIdx) in step.subSteps"
+                  :key="sIdx"
+                  class="apply-sub-step"
+                  :class="{
+                    'sub-done': sub.done,
+                    'sub-active': sub.active,
+                    'sub-pending': !sub.done && !sub.active,
+                  }"
+                >
+                  <span class="sub-icon">
+                    {{ sub.done ? "✓" : sub.active ? "·" : "·" }}
+                  </span>
+                  <span>{{ sub.label }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </n-modal>
     </template>
   </MyCard>
 </template>
@@ -643,6 +697,73 @@ const selectedQuality = ref("全部");
 const selectedCountry = ref("全部");
 const savedLineupsModalVisible = ref(false);
 const selectedTeamTab = ref(1);
+
+const applyProgressVisible = ref(false);
+const applyProgress = ref({
+  percentage: 0,
+  status: "default",
+  steps: [],
+});
+
+const initApplyProgress = (steps) => {
+  applyProgress.value = {
+    percentage: 0,
+    status: "default",
+    steps: steps.map((label) => ({
+      label,
+      done: false,
+      active: false,
+      subSteps: [],
+    })),
+  };
+  applyProgressVisible.value = true;
+};
+
+const setApplyStep = (index) => {
+  const steps = applyProgress.value.steps;
+  steps.forEach((s, i) => {
+    if (i < index) {
+      s.done = true;
+      s.active = false;
+      s.subSteps = [];
+    } else {
+      s.done = false;
+      s.active = i === index;
+    }
+  });
+  applyProgress.value.percentage = Math.round(
+    (index / steps.length) * 100,
+  );
+};
+
+const setApplySubSteps = (stepIndex, subStepLabels) => {
+  const step = applyProgress.value.steps[stepIndex];
+  if (!step) return;
+  step.subSteps = subStepLabels.map((label) => ({
+    label,
+    done: false,
+    active: false,
+  }));
+};
+
+const updateApplySubStep = (stepIndex, subIdx, state) => {
+  const step = applyProgress.value.steps[stepIndex];
+  if (!step || !step.subSteps[subIdx]) return;
+  Object.assign(step.subSteps[subIdx], state);
+};
+
+const finishApplyProgress = (success = true) => {
+  const steps = applyProgress.value.steps;
+  steps.forEach((s) => {
+    s.done = true;
+    s.active = false;
+  });
+  applyProgress.value.percentage = 100;
+  applyProgress.value.status = success ? "success" : "error";
+  setTimeout(() => {
+    applyProgressVisible.value = false;
+  }, 1200);
+};
 const expandedLineup = ref(null);
 const techModalVisible = ref(false);
 const selectedTechData = ref(null);
@@ -652,7 +773,7 @@ const dragOverPosition = ref(null);
 
 const STORAGE_KEY = "saved_lineups";
 
-const syncLegionResearch = async (tokenId, targetResearch) => {
+const syncLegionResearch = async (tokenId, targetResearch, onProgress) => {
   if (!targetResearch || Object.keys(targetResearch).length === 0) {
     return { success: true, message: "无科技数据需要同步" };
   }
@@ -700,60 +821,72 @@ const syncLegionResearch = async (tokenId, targetResearch) => {
     return { success: true, message: "科技配置已匹配，无需调整" };
   }
 
-  const errors = [];
-
-  for (const type of typesToResetResearch) {
-    try {
-      await tokenStore.sendMessageWithPromise(tokenId, "legion_resetresearch", {
-        advanced: false,
-        type: type,
-      });
-    } catch (err) {}
-    await delay(COMMAND_DELAY);
-  }
-
+  // 构建需要设置的科技列表（用于进度展示）
   const sortedTypes = [...typesToReset].sort((a, b) => a - b);
-  console.log(sortedTypes);
-
+  const techTasks = [];
   for (const type of sortedTypes) {
-    const techIds2 = LEGION_TECH_TYPE_MAP[type];
-    for (const techId of techIds2) {
+    for (const techId of LEGION_TECH_TYPE_MAP[type]) {
       const targetLevel = targetResearch[techId] || 0;
       if (targetLevel > 0) {
         const maxLevel = LEGION_TECH_MAX_LEVEL[techId];
+        const techName = LEGION_TECH_NAME[techId] || `科技${techId}`;
         const isMax = targetLevel >= maxLevel;
-        if (isMax) {
-          try {
-            await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "legion_research",
-              {
-                isMax: true,
-                researchId: techId,
-              },
-            );
-          } catch (err) {}
-          await delay(COMMAND_DELAY);
-        } else {
-          for (let i = 0; i < targetLevel; i++) {
-            try {
-              await tokenStore.sendMessageWithPromise(
-                tokenId,
-                "legion_research",
-                {
-                  isMax: false,
-                  researchId: techId,
-                },
-              );
-            } catch (err) {}
-            await delay(COMMAND_DELAY);
-          }
-        }
+        techTasks.push({ techId, targetLevel, isMax, techName, maxLevel });
       }
     }
   }
 
-  return { success: true, message: "科技配置已同步" };
+  const resetLabels = [...typesToResetResearch].map(
+    (t) => `重置 ${LEGION_TECH_TYPE_NAME[t] || t} 系`,
+  );
+  const techLabels = techTasks.map(
+    (t) =>
+      `${t.techName} → ${t.isMax ? "满级" : `${t.targetLevel}级`}`,
+  );
+  onProgress?.("init", [...resetLabels, ...techLabels]);
+
+  // 并发重置所有需要重置的类型
+  await Promise.all(
+    [...typesToResetResearch].map(async (type) => {
+      const label = `重置 ${LEGION_TECH_TYPE_NAME[type] || type} 系`;
+      const idx = resetLabels.indexOf(label);
+      onProgress?.("active", idx);
+      try {
+        await tokenStore.sendMessageWithPromise(tokenId, "legion_resetresearch", {
+          advanced: false,
+          type: type,
+        });
+      } catch (err) {}
+      onProgress?.("done", idx);
+    }),
+  );
+
+  // 并发设置所有科技（同一 techId 内顺序执行，不同 techId 并发）
+  await Promise.all(
+    techTasks.map(async ({ techId, targetLevel, isMax, techName }, i) => {
+      const subIdx = resetLabels.length + i;
+      onProgress?.("active", subIdx);
+      try {
+        if (isMax) {
+          await tokenStore.sendMessageWithPromise(tokenId, "legion_research", {
+            isMax: true,
+            researchId: techId,
+          });
+        } else {
+          for (let j = 0; j < targetLevel; j++) {
+            await tokenStore.sendMessageWithPromise(tokenId, "legion_research", {
+              isMax: false,
+              researchId: techId,
+            });
+            if (j < targetLevel - 1) await delay(COMMAND_DELAY);
+          }
+        }
+      } catch (err) {}
+      onProgress?.("done", subIdx);
+    }),
+  );
+
+  return { success: true, message: `科技配置已同步（${techTasks.length} 项）` };
 };
 
 const partMap = {
@@ -1733,6 +1866,42 @@ const applyLineup = async (lineup) => {
   state.value.isRunning = true;
   const errors = [];
 
+  const hasLevelDataCheck = lineup.heroes.some((h) => h.level && h.level > 0);
+  const hasFishDataCheck = lineup.heroes.some((h) => h.pearlId || h.fishId);
+  const hasResearchCheck =
+    lineup.legionResearch && Object.keys(lineup.legionResearch).length > 0;
+  const hasWeaponCheck =
+    lineup.weaponId !== undefined && lineup.weaponId !== null;
+
+  const progressSteps = [
+    "读取初始数据",
+    "处理附件位置",
+    "更新队伍状态",
+    "移除非目标武将",
+    "上阵目标武将",
+    ...(hasLevelDataCheck ? ["应用等级配置"] : []),
+    ...(hasFishDataCheck ? ["应用鱼灵配置"] : []),
+    ...(hasResearchCheck ? ["同步科技配置"] : []),
+    ...(hasWeaponCheck ? ["切换玩具"] : []),
+    "刷新队伍信息",
+  ];
+
+  const stepMap = {
+    读取初始数据: progressSteps.indexOf("读取初始数据"),
+    处理附件位置: progressSteps.indexOf("处理附件位置"),
+    更新队伍状态: progressSteps.indexOf("更新队伍状态"),
+    移除非目标武将: progressSteps.indexOf("移除非目标武将"),
+    上阵目标武将: progressSteps.indexOf("上阵目标武将"),
+    应用等级配置: progressSteps.indexOf("应用等级配置"),
+    应用鱼灵配置: progressSteps.indexOf("应用鱼灵配置"),
+    同步科技配置: progressSteps.indexOf("同步科技配置"),
+    切换玩具: progressSteps.indexOf("切换玩具"),
+    刷新队伍信息: progressSteps.indexOf("刷新队伍信息"),
+  };
+
+  savedLineupsModalVisible.value = false;
+  initApplyProgress(progressSteps);
+
   const getTeamHeroes = (teamInfo) => {
     if (!teamInfo) return [];
     return Object.entries(teamInfo)
@@ -1784,6 +1953,7 @@ const applyLineup = async (lineup) => {
   try {
     const targetHeroes = [...lineup.heroes];
 
+    setApplyStep(stepMap["读取初始数据"]);
     let { heroes, teamInfo } = await fetchLatestData();
     let currentHeroes = getTeamHeroes(teamInfo);
 
@@ -1797,6 +1967,7 @@ const applyLineup = async (lineup) => {
     const currentHeroIds = new Set(currentHeroes.map((h) => h.heroId));
     const targetHeroIds = new Set(targetHeroes.map((h) => h.heroId));
 
+    setApplyStep(stepMap["处理附件位置"]);
     for (const targetHero of targetHeroes) {
       if (!targetHero.attachmentUid || targetHero.attachmentUid === -1)
         continue;
@@ -1846,6 +2017,7 @@ const applyLineup = async (lineup) => {
       }
     }
 
+    setApplyStep(stepMap["更新队伍状态"]);
     await delay(COMMAND_DELAY);
     const data1 = await fetchLatestData();
     await delay(COMMAND_DELAY);
@@ -1859,6 +2031,7 @@ const applyLineup = async (lineup) => {
     currentHeroIds.clear();
     currentHeroes.forEach((h) => currentHeroIds.add(h.heroId));
 
+    setApplyStep(stepMap["移除非目标武将"]);
     for (const hero of [...currentHeroes]) {
       if (!targetHeroIds.has(hero.heroId)) {
         try {
@@ -1874,37 +2047,18 @@ const applyLineup = async (lineup) => {
       }
     }
 
+    setApplyStep(stepMap["上阵目标武将"]);
     await delay(COMMAND_DELAY);
     const data2 = await fetchLatestData();
     await delay(COMMAND_DELAY);
     currentHeroes = getTeamHeroes(data2.teamInfo);
 
-    for (const targetHero of targetHeroes) {
-      const currentHero = currentHeroes.find(
-        (h) => h.heroId === targetHero.heroId,
-      );
-      if (!currentHero) {
-        try {
-          await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "hero_gointobattle",
-            {
-              heroId: targetHero.heroId,
-              slot: targetHero.position,
-            },
-          );
-        } catch (err) {}
-        await delay(COMMAND_DELAY);
-      } else if (currentHero.position !== targetHero.position) {
-        try {
-          await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "hero_gobackbattle",
-            {
-              slot: currentHero.position,
-            },
-          );
-          await delay(COMMAND_DELAY);
+    const placeHeroes = async (heroesList, latestTeam) => {
+      for (const targetHero of heroesList) {
+        const currentHero = latestTeam.find(
+          (h) => h.heroId === targetHero.heroId,
+        );
+        if (!currentHero) {
           try {
             await tokenStore.sendMessageWithPromise(
               tokenId,
@@ -1916,13 +2070,66 @@ const applyLineup = async (lineup) => {
             );
           } catch (err) {}
           await delay(COMMAND_DELAY);
-        } catch (err) {}
-        await delay(COMMAND_DELAY);
+        } else if (currentHero.position !== targetHero.position) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "hero_gobackbattle",
+              {
+                slot: currentHero.position,
+              },
+            );
+            await delay(COMMAND_DELAY);
+            try {
+              await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "hero_gointobattle",
+                {
+                  heroId: targetHero.heroId,
+                  slot: targetHero.position,
+                },
+              );
+            } catch (err) {}
+            await delay(COMMAND_DELAY);
+          } catch (err) {}
+          await delay(COMMAND_DELAY);
+        }
       }
+    };
+
+    await placeHeroes(targetHeroes, currentHeroes);
+
+    // 校验上阵结果，不一致则重试（最多3次）
+    const MAX_PLACE_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_PLACE_RETRIES; attempt++) {
+      const verifyData = await fetchLatestData();
+      await delay(COMMAND_DELAY);
+      const verifyHeroes = getTeamHeroes(verifyData.teamInfo);
+
+      const mismatches = targetHeroes.filter((targetHero) => {
+        return !verifyHeroes.find(
+          (h) =>
+            h.heroId === targetHero.heroId &&
+            h.position === targetHero.position,
+        );
+      });
+
+      if (mismatches.length === 0) break;
+
+      // 更新步骤标签提示重试
+      const step = applyProgress.value.steps[stepMap["上阵目标武将"]];
+      if (step) step.label = `上阵目标武将（第${attempt}次补正）`;
+
+      await placeHeroes(mismatches, verifyHeroes);
     }
+
+    // 恢复步骤标签
+    const step = applyProgress.value.steps[stepMap["上阵目标武将"]];
+    if (step) step.label = "上阵目标武将";
 
     const hasLevelData = lineup.heroes.some((h) => h.level && h.level > 0);
     if (hasLevelData) {
+      setApplyStep(stepMap["应用等级配置"]);
       const levelData = await fetchLatestData();
       const currentHeroesData = levelData.heroes;
 
@@ -1964,6 +2171,7 @@ const applyLineup = async (lineup) => {
 
     const hasFishData = lineup.heroes.some((h) => h.pearlId || h.fishId);
     if (hasFishData) {
+      setApplyStep(stepMap["应用鱼灵配置"]);
       const fishData = await fetchLatestData();
       const currentHeroes = fishData.heroes;
       const pearlMap = fishData.pearlMap || {};
@@ -2123,9 +2331,26 @@ const applyLineup = async (lineup) => {
       lineup.legionResearch &&
       Object.keys(lineup.legionResearch).length > 0
     ) {
+      setApplyStep(stepMap["同步科技配置"]);
+      const techStepIdx = stepMap["同步科技配置"];
       const syncResult = await syncLegionResearch(
         tokenId,
         lineup.legionResearch,
+        (event, payload) => {
+          if (event === "init") {
+            setApplySubSteps(techStepIdx, payload);
+          } else if (event === "active") {
+            updateApplySubStep(techStepIdx, payload, {
+              active: true,
+              done: false,
+            });
+          } else if (event === "done") {
+            updateApplySubStep(techStepIdx, payload, {
+              active: false,
+              done: true,
+            });
+          }
+        },
       );
       if (syncResult.success) {
         if (syncResult.message !== "科技配置已匹配，无需调整") {
@@ -2136,6 +2361,7 @@ const applyLineup = async (lineup) => {
     }
 
     if (lineup.weaponId !== undefined && lineup.weaponId !== null) {
+      setApplyStep(stepMap["切换玩具"]);
       const currentPresetTeam = await tokenStore.sendMessageWithPromise(
         tokenId,
         "presetteam_getinfo",
@@ -2167,10 +2393,13 @@ const applyLineup = async (lineup) => {
       }
     }
 
+    setApplyStep(stepMap["刷新队伍信息"]);
     lastRefreshTime = 0;
     await refreshTeamInfo();
+    finishApplyProgress(true);
   } catch (error) {
     message.error(`应用阵容失败: ${error.message}`);
+    finishApplyProgress(false);
   } finally {
     lineup.applying = false;
     state.value.isRunning = false;
@@ -3564,5 +3793,95 @@ onMounted(() => {
   .hero-actions {
     min-width: 48px;
   }
+}
+
+.apply-progress-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.apply-progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.apply-progress-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 14px;
+  padding: 4px 0;
+  transition: color 0.2s;
+
+  &.step-done {
+    color: #18a058;
+    .step-icon {
+      color: #18a058;
+    }
+  }
+
+  &.step-active {
+    color: #2080f0;
+    font-weight: 600;
+    .step-icon {
+      color: #2080f0;
+    }
+  }
+
+  &.step-pending {
+    color: #999;
+    .step-icon {
+      color: #ccc;
+    }
+  }
+}
+
+.step-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.apply-sub-steps {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  margin-left: 28px;
+  padding: 6px 10px;
+  background: rgba(128, 128, 128, 0.06);
+  border-radius: 6px;
+  width: 100%;
+}
+
+.apply-sub-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 1px 0;
+
+  &.sub-done {
+    color: #18a058;
+  }
+
+  &.sub-active {
+    color: #2080f0;
+    font-weight: 600;
+  }
+
+  &.sub-pending {
+    color: #bbb;
+  }
+}
+
+.sub-icon {
+  font-size: 12px;
+  width: 14px;
+  text-align: center;
 }
 </style>
