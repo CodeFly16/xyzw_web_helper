@@ -1950,7 +1950,46 @@ const applyLineup = async (lineup) => {
     return msg.includes("200020");
   };
 
-  try {
+  const checkLineupMatch = () => {
+    const currentTeam = currentTeamInfo.value || {};
+    const currentPositionToHero = {};
+    for (const [pos, hero] of Object.entries(currentTeam)) {
+      if (hero?.heroId) currentPositionToHero[Number(pos)] = hero.heroId;
+    }
+    const localFishToArtifact = {};
+    for (const [fishId, book] of Object.entries(artifactBooks.value || {})) {
+      if (book.artifactId && book.artifactId !== -1) {
+        localFishToArtifact[Number(fishId)] = book.artifactId;
+      }
+    }
+    for (const targetHero of lineup.heroes) {
+      if (currentPositionToHero[targetHero.position] !== targetHero.heroId) {
+        return false;
+      }
+      if (targetHero.fishId || targetHero.pearlId) {
+        let expectedArtifactId = null;
+        if (targetHero.fishId) {
+          expectedArtifactId = localFishToArtifact[targetHero.fishId];
+        }
+        if (!expectedArtifactId && targetHero.pearlId) {
+          const pearl = pearlMap.value[targetHero.pearlId];
+          if (pearl?.artifactId && pearl.artifactId !== -1) {
+            expectedArtifactId = pearl.artifactId;
+          }
+        }
+        if (expectedArtifactId) {
+          const heroData = roleHeroesData.value[String(targetHero.heroId)];
+          if (heroData?.artifactId !== expectedArtifactId) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  };
+
+  const executeSteps = async () => {
+    errors.length = 0;
     const targetHeroes = [...lineup.heroes];
 
     setApplyStep(stepMap["读取初始数据"]);
@@ -2142,19 +2181,19 @@ const applyLineup = async (lineup) => {
     if (hasFishData) {
       setApplyStep(stepMap["应用鱼灵配置"]);
       const fishData = await fetchLatestData();
-      const currentHeroes = fishData.heroes;
-      const pearlMap = fishData.pearlMap || {};
-      const artifactBooks = fishData.artifactBooks || {};
+      const currentHeroesForFish = fishData.heroes;
+      const fishPearlMap = fishData.pearlMap || {};
+      const fishArtifactBooks = fishData.artifactBooks || {};
 
       const artifactToHero = {};
-      for (const [heroId, hero] of Object.entries(currentHeroes)) {
+      for (const [heroId, hero] of Object.entries(currentHeroesForFish)) {
         if (hero.artifactId && hero.artifactId !== -1) {
           artifactToHero[hero.artifactId] = Number(heroId);
         }
       }
 
       const fishToArtifact = {};
-      for (const [fishId, book] of Object.entries(artifactBooks)) {
+      for (const [fishId, book] of Object.entries(fishArtifactBooks)) {
         if (book.artifactId && book.artifactId !== -1) {
           fishToArtifact[Number(fishId)] = book.artifactId;
         }
@@ -2172,7 +2211,7 @@ const applyLineup = async (lineup) => {
         }
 
         if (!artifactId && targetHero.pearlId) {
-          const pearlData = pearlMap[targetHero.pearlId];
+          const pearlData = fishPearlMap[targetHero.pearlId];
           if (pearlData?.artifactId && pearlData.artifactId !== -1) {
             artifactId = pearlData.artifactId;
           }
@@ -2200,12 +2239,19 @@ const applyLineup = async (lineup) => {
                 heroId: currentHolderId,
               },
             );
+            delete artifactToHero[artifactId];
+            if (currentHeroesForFish[String(currentHolderId)]) {
+              currentHeroesForFish[String(currentHolderId)] = {
+                ...currentHeroesForFish[String(currentHolderId)],
+                artifactId: -1,
+              };
+            }
           } catch (err) {}
           await delay(COMMAND_DELAY);
         }
 
         // 目标英雄当前若携带了不同鱼灵，需先卸下，否则服务端会拒绝装载
-        const targetHeroData = currentHeroes[String(targetHero.heroId)];
+        const targetHeroData = currentHeroesForFish[String(targetHero.heroId)];
         const existingArtifactId = targetHeroData?.artifactId;
         if (
           existingArtifactId &&
@@ -2220,6 +2266,11 @@ const applyLineup = async (lineup) => {
                 heroId: targetHero.heroId,
               },
             );
+            delete artifactToHero[existingArtifactId];
+            currentHeroesForFish[String(targetHero.heroId)] = {
+              ...targetHeroData,
+              artifactId: -1,
+            };
           } catch (err) {}
           await delay(COMMAND_DELAY);
         }
@@ -2231,6 +2282,11 @@ const applyLineup = async (lineup) => {
             pearlId: pearlId,
           });
           fishApplied++;
+          artifactToHero[artifactId] = targetHero.heroId;
+          currentHeroesForFish[String(targetHero.heroId)] = {
+            ...(currentHeroesForFish[String(targetHero.heroId)] || {}),
+            artifactId: artifactId,
+          };
         } catch (err) {}
         await delay(COMMAND_DELAY);
       }
@@ -2396,7 +2452,18 @@ const applyLineup = async (lineup) => {
     setApplyStep(stepMap["刷新队伍信息"]);
     lastRefreshTime = 0;
     await refreshTeamInfo();
-    finishApplyProgress(true);
+  };
+
+  try {
+    await executeSteps();
+    if (checkLineupMatch()) {
+      finishApplyProgress(true);
+    } else {
+      message.warning("阵容比对未通过，正在重新应用...");
+      initApplyProgress(progressSteps);
+      await executeSteps();
+      finishApplyProgress(true);
+    }
   } catch (error) {
     message.error(`应用阵容失败: ${error.message}`);
     finishApplyProgress(false);
